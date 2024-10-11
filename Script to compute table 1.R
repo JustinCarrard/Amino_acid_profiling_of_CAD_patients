@@ -22,6 +22,7 @@ library(readxl)
 library(tidyverse)
 library(dplyr)
 library(tidyr)
+library(transplantr)
 
 #install.packages("rmarkdown")
 library(rmarkdown)
@@ -42,7 +43,7 @@ rstudioapi::writeRStudioPreference("data_viewer_max_columns", 1000L)
 #------------------------------------------------------------------------------------------
 
 # Paths
-setwd("") # Main path
+setwd("/Volumes/nuxyde32/Uni-Basel/DSBG/Forschung/COmPLETE Health/Metabolomics/MSc Luisa/Table 1") # Main path
 
 data_path <- "./data" # Path for data
 graphics_path <- "./output/graphics" # Path for graphics
@@ -53,7 +54,7 @@ text_path <- "./output/text" # Path for text-output
 #------------------------------------------------------------------------------------------
 
 #import_data
-dat <- as.data.frame(read_excel(paste0(data_path, "/", "xxx.xlsx")))
+dat <- as.data.frame(read_excel(paste0(data_path, "/", "CHL_CHR_complete.xlsx")))
 
 head(dat)
 str(dat)
@@ -94,6 +95,33 @@ dat$CAD <- factor(dat$CAD)
 dat$LVEF <- factor(dat$LVEF)
 dat$Number_of_vessels <- factor(dat$Number_of_vessels)
 dat$Sampling_time_cat <- factor(dat$Sampling_time_cat)
+
+#------------------------------------------------------------------------------------------
+# Add eGFR based on creatinine values in micromol/L
+#------------------------------------------------------------------------------------------
+
+dat$eGFR <- ckd_epi(creat = dat$creatinine, age = dat$Age, sex = dat$Sex, eth = rep("non-black", nrow(dat)))
+
+#------------------------------------------------------------------------------------------
+# Add a stage of kidney function (1 to 5) according to eGFR
+#------------------------------------------------------------------------------------------
+
+dat$eGFR_stage <- NA
+
+dat$eGFR_stage[dat$eGFR > 90] <- "G1"
+dat$eGFR_stage[dat$eGFR <= 90 & dat$eGFR > 60] <- "G2"
+dat$eGFR_stage[dat$eGFR <= 60 & dat$eGFR > 45] <- "G3a"
+dat$eGFR_stage[dat$eGFR <= 45 & dat$eGFR > 30] <- "G3b"
+dat$eGFR_stage[dat$eGFR <= 30 & dat$eGFR > 15] <- "G4"
+dat$eGFR_stage[dat$eGFR<= 15] <- "G5"
+
+dat$eGFR_stage <- factor(dat$eGFR_stage, levels = c("G1", "G2", "G3a", "G3b", "G4", "G5"))
+
+#Convert eGFR_stage to factor
+dat$eGFR_stage <- factor(dat$eGFR_stage)
+
+#count the frequency of each stages
+table(dat$eGFR_stage)
 
 #------------------------------------------------------------------------------------------
 # Check for missing data
@@ -177,6 +205,16 @@ dat.match$Number_of_vessels <-
                   "Double-vessel CAD", 
                   "Triple-vessel CAD"))
 
+dat.match$eGFR_stage <- 
+  factor(dat.match$eGFR_stage, levels=c("G1", "G2", "G3a", "G3b", "G4", "G5"),
+         labels=c("Normal or high", 
+                  "Mildly decreased", 
+                  "Mildly to moderately decreased", 
+                  "Moderately to severely decreased",
+                  "Severely decreased",
+                  "Kidney failure"))
+
+
 #Specify units
 units(dat.match$Age) <- "years"
 units(dat.match$BMI) <- "kg/m^2"
@@ -192,6 +230,7 @@ units(dat.match$HDL_mmol_l) <- "mmol/L"
 units(dat.match$LDL_mmol_l) <- "mmol/L"
 units(dat.match$TG_mmol_l) <- "mmol/L"
 units(dat.match$HbA1c) <- "%"
+units(dat.match$eGFR_stage) <- "ml/min/1.73m2"
 
 #Rename variables
 label(dat.match$Smoking_status) <- "Smoking status"
@@ -206,9 +245,10 @@ label(dat.match$Chol_mmol_l) <- "Total cholesterol"
 label(dat.match$HDL_mmol_l) <- "HDL-cholesterol"
 label(dat.match$LDL_mmol_l) <- "LDL-cholesterol"
 label(dat.match$TG_mmol_l) <- "Triglycerides"
+label(dat.match$eGFR_stage) <- "Glomerular filtration rate categories"
 
 #Compute Table1
-Table1 <- table1(~ Age + PBF + BMI + SBP + DBP + VO2peak_ml_min_kg + Total_MVPA + Total_PA +Smoking_status + Fasting + Chol_mmol_l + HDL_mmol_l + LDL_mmol_l + TG_mmol_l + HbA1c + Number_of_vessels + LVEF | CAD, data=dat.match, overall = FALSE)
+Table1 <- table1(~ Age + PBF + BMI + SBP + DBP + VO2peak_ml_min_kg + Total_MVPA + Total_PA +Smoking_status + Fasting + Chol_mmol_l + HDL_mmol_l + LDL_mmol_l + TG_mmol_l + HbA1c + eGFR_stage + Number_of_vessels + LVEF | CAD*Sex, data=dat.match, overall = TRUE)
 
 my.render.cont <- function(x) {
     with(stats.default(x), 
@@ -226,7 +266,7 @@ my.render.cont <- function(x) {
 }
 
 #Compute Table1
-Table1 <- table1(~ Age + PBF + BMI + SBP + DBP + VO2peak_ml_min_kg + Total_MVPA + Total_PA +Smoking_status + Fasting + Chol_mmol_l + HDL_mmol_l + LDL_mmol_l + TG_mmol_l + HbA1c + Number_of_vessels + LVEF | CAD, data=dat.match, overall = FALSE)
+Table1 <- table1(~ Age + PBF + BMI + SBP + DBP + VO2peak_ml_min_kg + Total_MVPA + Total_PA +Smoking_status + Fasting + Chol_mmol_l + HDL_mmol_l + LDL_mmol_l + TG_mmol_l + HbA1c + eGFR_stage + Number_of_vessels + LVEF | CAD*Sex, data=dat.match, overall = TRUE)
 
 # Convert to HTML
 Table1_html <- htmlTable(as.matrix(Table1))
